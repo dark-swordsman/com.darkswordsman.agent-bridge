@@ -4,7 +4,7 @@ A small Unity editor package that lets coding agents (Claude Code, Codex, Cursor
 
 It's a general Unity tool, built and tested on **Unity 2022.3** for **VRChat** projects. Integrations for VRCFury and Poiyomi light up when those packages are present and stay out of the way otherwise.
 
-## Risks: read this first
+## ⚠️ Risks: read this first
 
 **This is vibe coded slop, use at your own risk.** More concretely:
 
@@ -14,11 +14,11 @@ It's a general Unity tool, built and tested on **Unity 2022.3** for **VRChat** p
 - **Your agent's permission settings are the only gate.** Keep per-command approval on (for the shell or the MCP tool) until you trust what it does.
 - Tested on Linux with Unity 2022.3. **Windows is written for but not yet confirmed**; see [issue #1](https://github.com/dark-swordsman/com.darkswordsman.agent-bridge/issues/1).
 
-## Why not just a Unity MCP server?
+## 🤔 Why not just a Unity MCP server?
 
 MCP results are large and stay in the agent's context for the rest of the session. A scene hierarchy can be 50 KB+, and a Poiyomi material has hundreds of properties. Existing tools also often can't see inactive objects, can't read or write a single serialized property, and fail across script reloads. The bridge answers narrow questions, caps what it prints, and waits out recompiles instead of failing.
 
-## Install
+## 📦 Install
 
 Pick one:
 
@@ -27,7 +27,7 @@ Pick one:
 
 The CLI is `Tools~/ub`, written in Python 3.7+ with no dependencies. **Tools > Agent Bridge > Copy ub Path** copies its location; with a git install it lives under `Library/PackageCache/`. Run it from anywhere inside the project, or pass `--project DIR`. On Windows, use `py "<path>\ub" …`.
 
-## Reads
+## 🔍 Reads
 
 ```
 ub ping                                                  # Unity state, open scenes, selection
@@ -45,7 +45,7 @@ ub logs                                                  # console messages sinc
 ub logs -g "error|exception"
 ```
 
-## Writes
+## ✏️ Writes
 
 The full design is in `Documentation~/write-commands.md`.
 
@@ -77,7 +77,7 @@ ub play enter                                            # also: exit, pause, re
 - Scene edits are undoable, one Undo step per command (`ub menu item=Edit/Undo` works). They only dirty the scene until `save`. Edits with `asset=<.prefab>` or on plain assets, and `setmat`, save the asset immediately, so commit first.
 - Each write prints what changed (`old -> new`). Errors list what does exist: similar property paths, the components on the object, the types that fit a managed reference.
 
-## MCP
+## 🔌 MCP
 
 For clients without a shell, or if you prefer MCP tools, `ub mcp` serves the same commands as an MCP server over stdio. It has no dependencies; it's the same Python file. With Claude Code:
 
@@ -91,7 +91,7 @@ There are two tools:
 
 It deliberately exposes one generic tool rather than one per command, because every tool's schema costs context in every session. Answers are capped the same way as the CLI's. The risks above apply equally; your client's tool-approval setting is the gate.
 
-## General
+## ⚙️ General
 
 - `path=` is a scene path whose first segment is a root object. With `asset=`, it's a path inside that prefab (empty means the root).
 - Quote any argument containing `[ ]` or spaces. zsh treats brackets as a glob pattern and fails.
@@ -103,7 +103,7 @@ It deliberately exposes one generic tool rather than one per command, because ev
   - 2: usage error
   - 3: timeout
 
-## Notes
+## 📝 Notes
 
 - How it works: `ub` writes `Temp/AgentBridge/in/<id>.req`, a command line followed by `key=value` lines. `Editor/AgentBridge.cs` polls that folder every 0.25 s from `EditorApplication.update` and writes `out/<id>.txt`. There's no network and no open port.
 - **Unfocused editor:** on Linux, the update loop keeps running while Unity is in the background. On Windows, Unity may throttle it. If requests hang until you click into Unity, that's why. A Win32 timer calling `EditorApplication.QueuePlayerLoopUpdate()` (as mcp-unity's `McpBackgroundTick.cs` does) would fix it. Reports welcome.
@@ -112,7 +112,7 @@ It deliberately exposes one generic tool rather than one per command, because ev
   - `--stack` adds stack frames, `--raw` prints every log line, and `--all` starts from the top of the log rather than the last `ub logs`.
 - `overrides` hides default overrides (root name and position) unless `defaults=1`.
 
-## Integrations
+## 🧩 Integrations
 
 These activate only when the package is present:
 
@@ -121,14 +121,14 @@ These activate only when the package is present:
 
 An extension point, so other packages can add their own commands without editing the core, is planned; see [issue #2](https://github.com/dark-swordsman/com.darkswordsman.agent-bridge/issues/2).
 
-## Extending
+## 🛠️ Extending
 
 Add a read command in `Editor/Commands.cs`, or a write command in `Editor/WriteCommands.cs`. Each needs one entry in `Commands.All` and one method that takes `Args` and returns text. Write commands go through the `Edit` helper, which handles Undo, prefab-asset loading and saving. Throw `ArgumentException` for user errors; the message becomes the `ERROR:` line.
 
-## Contributing
+## 🤝 Contributing
 
 Fork the repo and open a PR against `main`. See `.github/CONTRIBUTING.md`; coding agents should also read `AGENTS.md`.
 
-## License
+## 📄 License
 
 MIT. See `LICENSE.md`.
