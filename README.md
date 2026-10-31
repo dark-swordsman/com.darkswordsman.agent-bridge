@@ -1,0 +1,134 @@
+# Agent Bridge
+
+A small Unity editor package that lets coding agents (Claude Code, Codex, Cursor, …) read and edit the open editor. Any agent with a shell can use the `ub` CLI, and there's an optional MCP server for clients without one. Answers are short plain text with a capped preview; the full output stays on disk to grep.
+
+It's a general Unity tool, built and tested on **Unity 2022.3** for **VRChat** projects. Integrations for VRCFury and Poiyomi light up when those packages are present and stay out of the way otherwise.
+
+## Risks: read this first
+
+**This is vibe coded slop, use at your own risk.** More concretely:
+
+- **Edits happen without confirmation.** `ub` changes the open editor directly. Scene edits can be undone (one Undo step per command) and stay unsaved until `ub save`. **Prefab, asset and material edits save to disk immediately.** Commit to git before you let an agent loose.
+- **`menu` runs any menu item,** which in practice means arbitrary editor code, including from other packages.
+- **No authentication.** Anything that can write a file into `<project>/Temp/AgentBridge/in/` can drive the editor while it's open. That's no more than local file access already allows, but know it's there. Nothing listens on the network.
+- **Your agent's permission settings are the only gate.** Keep per-command approval on (for the shell or the MCP tool) until you trust what it does.
+- Tested on Linux with Unity 2022.3. **Windows is written for but not yet confirmed**; see the Windows issue.
+
+## Why not just a Unity MCP server?
+
+MCP results are large and stay in the agent's context for the rest of the session. A scene hierarchy can be 50 KB+, and a Poiyomi material has hundreds of properties. Existing tools also often can't see inactive objects, can't read or write a single serialized property, and fail across script reloads. The bridge answers narrow questions, caps what it prints, and waits out recompiles instead of failing.
+
+## Install
+
+Pick one:
+
+- **From git:** in Package Manager, use **+ > Add package from git URL…** with `https://github.com/dark-swordsman/com.darkswordsman.agent-bridge.git` (append `#v0.3.0` to pin a version).
+- **From disk:** clone the repo somewhere outside your project, then use **+ > Add package from disk…** and pick its `package.json`.
+
+The CLI is `Tools~/ub`, written in Python 3.7+ with no dependencies. **Tools > Agent Bridge > Copy ub Path** copies its location; with a git install it lives under `Library/PackageCache/`. Run it from anywhere inside the project, or pass `--project DIR`. On Windows, use `py "<path>\ub" …`.
+
+## Reads
+
+```
+ub ping                                                  # Unity state, open scenes, selection
+ub find name=Hoodie                                      # scene paths, inactive objects included
+ub hierarchy path=Avatar depth=1
+ub hierarchy asset="Assets/Avatar/Avatar.prefab" depth=1
+ub props path=Avatar/Hoodie component=Toggle             # VRCFury features match by feature type
+ub props path=Avatar/Body component=SkinnedMeshRenderer filter=m_Materials
+ub props asset="Assets/Avatar/Parameters.asset"          # plain assets work too
+ub material asset="Assets/Avatar/Body.mat" prefix=_Color
+ub material path=Avatar/Body slot=0 prefix=_UDIM
+ub mesh path=Avatar/Hoodie shapes=Hide                   # blendshapes, UV tiles they move, bones
+ub overrides path=Avatar                                 # prefab instance overrides
+ub logs                                                  # console messages since the last `ub logs`
+ub logs -g "error|exception"
+```
+
+## Writes
+
+The full design is in `Documentation~/write-commands.md`.
+
+```
+ub set path=Avatar/Hoodie component=Transform m_LocalPosition=0,0.1,0
+ub set path=Avatar/Hoodie component=GameObject m_IsActive=false
+ub set path=Avatar/Hoodie component=Toggle content.name="Clothing/Hoodie" content.saved=true
+ub set path=Avatar/Hoodie component=Toggle content.state.actions.Array.size=1 "content.state.actions.Array.data[0]=new:BlendShapeAction"
+ub set asset="Assets/Avatar/Avatar.prefab" path=Body component=SkinnedMeshRenderer "m_Materials.Array.data[0]=Assets/Avatar/Body.mat"
+ub set asset="Assets/Avatar/Parameters.asset" "parameters.Array.data[3].saved=false"
+ub setmat asset="Assets/Avatar/Body.mat" _Color="#ff8080" _Cutoff=0.5
+ub create path=Avatar name=Props                         # or prefab=Assets/x.prefab for a linked instance
+ub duplicate path=Avatar/Hoodie name="Hoodie 2"
+ub reparent path=Avatar/Props to=Avatar/Armature/Hips    # keeps world position unless keepworld=0
+ub addcomp path=Avatar/Props type=VRCFury feature=Toggle
+ub rmcomp path=Avatar/Props component=BoxCollider
+ub delete path=Avatar/Props
+ub revert path=Avatar/Body component=SkinnedMeshRenderer "prop=m_Materials.Array.data[0]"
+ub apply path=Avatar/Body                                # that object's and its components' overrides
+ub select path=Avatar                                    # works on inactive objects
+ub menu item="Tools/VRCFury/Build an Editor Test Copy"   # waits up to 600 s
+ub refresh                                               # AssetDatabase.Refresh
+ub save                                                  # dirty scenes, the prefab stage, and assets
+ub open scene="Assets/Scenes/Main.unity"                 # refuses with unsaved changes unless force=1
+ub play enter                                            # also: exit, pause, resume; `ub play` alone shows status
+```
+
+- `set` takes `<propertyPath>=<value>` pairs and applies them in order. It accepts the same paths and value formats that `props` prints, so you can read a value and write it back. `component=GameObject` targets the GameObject itself. On a non-prefab asset (`.asset`, `.controller`, …), `set` edits the asset itself, and `sub=` picks a sub-asset by name.
+- Scene edits are undoable, one Undo step per command (`ub menu item=Edit/Undo` works). They only dirty the scene until `save`. Edits with `asset=<.prefab>` or on plain assets, and `setmat`, save the asset immediately, so commit first.
+- Each write prints what changed (`old -> new`). Errors list what does exist: similar property paths, the components on the object, the types that fit a managed reference.
+
+## MCP
+
+For clients without a shell, or if you prefer MCP tools, `ub mcp` serves the same commands as an MCP server over stdio. It has no dependencies; it's the same Python file. With Claude Code:
+
+```
+claude mcp add unity -- python3 /path/to/Tools~/ub mcp --project /path/to/YourProject
+```
+
+There are two tools:
+- `unity(command, args, max, timeout)` runs any command above. For example, `{"command": "set", "args": {"path": "Avatar/Hoodie", "component": "Transform", "m_LocalPosition": "0,0.1,0"}}`.
+- `unity_logs(grep, stack, all, raw)` reads the console.
+
+It deliberately exposes one generic tool rather than one per command, because every tool's schema costs context in every session. Answers are capped the same way as the CLI's. The risks above apply equally; your client's tool-approval setting is the gate.
+
+## General
+
+- `path=` is a scene path whose first segment is a root object. With `asset=`, it's a path inside that prefab (empty means the root).
+- Quote any argument containing `[ ]` or spaces. zsh treats brackets as a glob pattern and fails.
+- `--max N` caps the printed preview (6000 characters by default). The full answer stays in `Temp/AgentBridge/out/`, so it can be grepped.
+- `--timeout S` defaults to 30 (600 for `menu`). Requests wait while Unity compiles or imports. A request nobody picked up is removed when it times out.
+- Exit codes:
+  - 0: success
+  - 1: `ERROR: …` answer
+  - 2: usage error
+  - 3: timeout
+
+## Notes
+
+- How it works: `ub` writes `Temp/AgentBridge/in/<id>.req`, a command line followed by `key=value` lines. `Editor/AgentBridge.cs` polls that folder every 0.25 s from `EditorApplication.update` and writes `out/<id>.txt`. There's no network and no open port.
+- **Unfocused editor:** on Linux, the update loop keeps running while Unity is in the background. On Windows, Unity may throttle it. If requests hang until you click into Unity, that's why. A Win32 timer calling `EditorApplication.QueuePlayerLoopUpdate()` (as mcp-unity's `McpBackgroundTick.cs` does) would fix it. Reports welcome.
+- `logs` reads Editor.log directly and never talks to Unity. The log is in `~/.config/unity3d/` on Linux, `%LOCALAPPDATA%\Unity\Editor\` on Windows and `~/Library/Logs/Unity/` on macOS; override with `UB_EDITOR_LOG`.
+  - By default it prints only console messages (the line before each `(Filename: …)` marker) and compiler `error CS`/`warning CS` lines, and filters out mcp-unity's request echo.
+  - `--stack` adds stack frames, `--raw` prints every log line, and `--all` starts from the top of the log rather than the last `ub logs`.
+- `overrides` hides default overrides (root name and position) unless `defaults=1`.
+
+## Integrations
+
+These activate only when the package is present:
+
+- **VRCFury:** `component=Toggle` (or any feature type) matches VRCFury components by feature. `addcomp type=VRCFury feature=Toggle` creates one, and `set` reaches into feature content, including `new:<ActionType>` for action lists. This reads VRCFury's serialized `content` field; if a VRCFury update renames it, feature matching stops and plain type names keep working.
+- **Poiyomi:** `material` flags locked shaders, `setmat` warns before editing one, and `mesh` names UV tiles the way Poiyomi's UDIM discard does.
+
+An extension point, so other packages can add their own commands without editing the core, is planned; see the issues.
+
+## Extending
+
+Add a read command in `Editor/Commands.cs`, or a write command in `Editor/WriteCommands.cs`. Each needs one entry in `Commands.All` and one method that takes `Args` and returns text. Write commands go through the `Edit` helper, which handles Undo, prefab-asset loading and saving. Throw `ArgumentException` for user errors; the message becomes the `ERROR:` line.
+
+## Contributing
+
+Fork the repo and open a PR against `main`. See `.github/CONTRIBUTING.md`; coding agents should also read `AGENTS.md`.
+
+## License
+
+MIT. See `LICENSE.md`.

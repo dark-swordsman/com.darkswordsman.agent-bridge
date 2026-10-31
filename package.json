@@ -1,0 +1,15 @@
+{
+  "name": "com.darkswordsman.agent-bridge",
+  "version": "0.3.0",
+  "displayName": "Agent Bridge",
+  "description": "File-based query and edit bridge so coding agents can work with the open Unity editor through small, grep-able output. See README.md.",
+  "unity": "2022.3",
+  "author": {
+    "name": "DarkSwordsman",
+    "url": "https://github.com/dark-swordsman"
+  },
+  "license": "MIT",
+  "documentationUrl": "https://github.com/dark-swordsman/com.darkswordsman.agent-bridge#readme",
+  "changelogUrl": "https://github.com/dark-swordsman/com.darkswordsman.agent-bridge/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/dark-swordsman/com.darkswordsman.agent-bridge/blob/main/LICENSE.md"
+}

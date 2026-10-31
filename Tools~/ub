@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+"""Agent Bridge CLI: ask the open Unity editor a question (or make an edit) and print a capped answer.
+
+  ub <command> [action] [key=value ...] [--max N] [--timeout S] [--project DIR]
+  ub logs [-g REGEX] [--all] [--stack] [--raw]   console messages from Editor.log since the last `ub logs`
+  ub mcp [--project DIR]                         serve the same commands as an MCP server over stdio
+
+Requests go to <project>/Temp/AgentBridge/in/, answers come back from .../out/<id>.txt.
+The full answer always stays on disk; only a preview of --max characters (default 6000) is printed.
+Reads: ping, find, hierarchy, props, material, mesh, overrides, select, refresh.
+Writes: set, setmat, create, delete, duplicate, reparent, addcomp, rmcomp, apply, revert, menu, save, open, play.
+A bare word after the command becomes action= (`ub play enter`). `menu` waits up to 600 s by default
+(menu items like test builds block Unity). See README.md.
+"""
+import json
+import os
+import re
+import sys
+import time
+import uuid
+
+def editor_log():
+    if os.environ.get("UB_EDITOR_LOG"):
+        return os.environ["UB_EDITOR_LOG"]
+    if sys.platform == "win32":
+        return os.path.join(os.environ.get("LOCALAPPDATA", ""), "Unity", "Editor", "Editor.log")
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Logs/Unity/Editor.log")
+    return os.path.expanduser("~/.config/unity3d/Editor.log")
+
+
+EDITOR_LOG = editor_log()
+MCP_ECHO = re.compile(r"\[MCP Unity\] WebSocket message")
+STACK = re.compile(r"^\s+at |^UnityEngine\.|^UnityEditor\.|\(at [^)]*:\d+\)$|^[\w.<>`+]+:[\w.<>`]+ ?\(.*\)$|^System\.")
+COMPILER = re.compile(r"error CS\d+|warning CS\d+")
+
+
+def find_project(start):
+    d = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(d, "ProjectSettings")) and os.path.isdir(os.path.join(d, "Assets")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:  # filesystem root ("/" or "C:\\")
+            return None
+        d = parent
+
+
+def take_opt(argv, name, default):
+    if name in argv:
+        i = argv.index(name)
+        value = argv[i + 1]
+        del argv[i:i + 2]
+        return value
+    return default
+
+
+def cap(text, limit, path=None):
+    """The first `limit` characters (cut at a line end), plus a footer saying where the rest is."""
+    text = text if text.endswith("\n") else text + "\n"
+    if len(text) <= limit:
+        return text
+    where = f"; full output: {path}" if path else ""
+    return text[:limit].rsplit("\n", 1)[0] + f"\n[truncated: {len(text)} chars, {text.count(chr(10))} lines{where}]\n"
+
+
+def console_messages(text, stack):
+    """Pull console messages out of Editor.log: each one is the block just before a "(Filename: ...)" line.
+    Compiler errors and warnings (error CSxxxx) are kept as they appear."""
+    out = []
+    blocks = re.split(r"\n\s*\n", text)
+    for i, block in enumerate(blocks):
+        lines = block.splitlines()
+        if lines and lines[0].startswith("(Filename:") and i > 0:
+            prev = blocks[i - 1].splitlines()
+            # Unrelated lines can share the block, so the message is the line just before the first stack frame.
+            cut = next((j for j, l in enumerate(prev) if STACK.search(l)), len(prev))
+            if cut == 0 or MCP_ECHO.search(prev[cut - 1]):
+                continue
+            out.append(prev[cut - 1])
+            if stack:
+                out.extend("    " + l.strip() for l in prev[cut:])
+        else:
+            out.extend(l for l in lines if COMPILER.search(l))
+    return out
+
+
+def logs_text(project, pattern=None, everything=False, stack=False, raw=False):
+    mark = os.path.join(project, "Temp", "AgentBridge", "logmark")
+    os.makedirs(os.path.dirname(mark), exist_ok=True)
+    size = os.path.getsize(EDITOR_LOG)
+    start = 0
+    if not everything and os.path.exists(mark):
+        start = int(open(mark).read().strip() or 0)
+        if start > size:  # Editor.log was recreated by a restart
+            start = 0
+    with open(EDITOR_LOG, "rb") as f:
+        f.seek(start)
+        text = f.read(size - start).decode("utf-8", "replace")
+    with open(mark, "w") as f:
+        f.write(str(size))
+    out = text.splitlines() if raw else console_messages(text, stack)
+    out = [l for l in out if l.strip()]
+    if pattern:
+        rx = re.compile(pattern, re.I)
+        out = [l for l in out if rx.search(l)]
+    return "\n".join(out) if out else "(no new console messages)"
+
+
+def request(project, cmd, pairs, timeout=None):
+    """Send one command to Unity. Returns (exit code, text, path of the full answer or None)."""
+    timeout = float(timeout or (600 if cmd == "menu" else 30))
+    for k, v in pairs:
+        if "\n" in k or "\n" in v or "=" in k:
+            return 2, f"ub: bad argument {k!r}: keys can't contain '=' and nothing can contain newlines", None
+    root = os.path.join(project, "Temp", "AgentBridge")
+    in_dir, out_dir = os.path.join(root, "in"), os.path.join(root, "out")
+    os.makedirs(in_dir, exist_ok=True)
+    rid = time.strftime("%H%M%S-") + uuid.uuid4().hex[:6]
+    req = os.path.join(in_dir, rid + ".req")
+    with open(req + ".tmp", "w", encoding="utf-8") as f:
+        f.write("\n".join([cmd] + [f"{k}={v}" for k, v in pairs]) + "\n")
+    os.replace(req + ".tmp", req)
+
+    out = os.path.join(out_dir, rid + ".txt")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if os.path.exists(out):
+            text = open(out, encoding="utf-8").read()
+            return (1 if text.startswith("ERROR:") else 0), text, out
+        time.sleep(0.1)
+
+    picked_up = not os.path.exists(req)
+    if not picked_up:
+        os.remove(req)
+    state = "Unity took the request but hasn't answered (long command?)" if picked_up else \
+        "nobody picked it up: is the editor open, compiling, or missing the package?"
+    return 3, f"ub: timed out after {timeout:.0f}s; {state}", None
+
+
+# --- MCP (stdio, newline-delimited JSON-RPC 2.0) ---
+# One generic tool instead of one per command: every tool schema costs context in every session.
+
+MCP_TOOLS = [
+    {
+        "name": "unity",
+        "description": (
+            "Run an Agent Bridge command in the open Unity editor and get a short plain-text answer. "
+            "Reads: ping, find, hierarchy, props, material, mesh, overrides. "
+            "Writes: set, setmat, create, delete, duplicate, reparent, addcomp, rmcomp, apply, revert, select, refresh, menu, save, open, play. "
+            "Objects are addressed by path=<scene path> (inactive objects included) or asset=<.prefab> plus path= inside it. "
+            "Examples: {command:'props', args:{path:'Avatar/Hoodie', component:'Toggle'}}; "
+            "{command:'set', args:{path:'Avatar/Hoodie', component:'Transform', m_LocalPosition:'0,0.1,0'}} "
+            "(set takes the property paths and value formats props prints, applied in order); "
+            "{command:'play', args:{action:'enter'}}. "
+            "Scene edits are undoable and need `save`; prefab, asset and material edits save immediately. "
+            "Full reference: the package README."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "Command name, e.g. props, set, play."},
+                "args": {"type": "object", "description": "key=value arguments as an object, in order.", "additionalProperties": {"type": ["string", "number", "boolean"]}},
+                "max": {"type": "integer", "description": "Preview cap in characters (default 6000). The full answer stays on disk; its path is in the footer."},
+                "timeout": {"type": "number", "description": "Seconds to wait (default 30, menu 600)."},
+            },
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "unity_logs",
+        "description": "Unity console messages since the last call, read from Editor.log (works with the editor closed). Compiler errors included.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "grep": {"type": "string", "description": "Case-insensitive regex filter."},
+                "stack": {"type": "boolean", "description": "Include stack frames."},
+                "all": {"type": "boolean", "description": "Start from the top of the log instead of the last call."},
+                "raw": {"type": "boolean", "description": "Every log line, not just console messages."},
+                "max": {"type": "integer"},
+            },
+        },
+    },
+]
+
+
+def mcp_value(v):
+    return ("true" if v else "false") if isinstance(v, bool) else str(v)
+
+
+def mcp_call(project, name, args):
+    limit = int(args.get("max") or 6000)
+    if name == "unity_logs":
+        text = logs_text(project, args.get("grep"), bool(args.get("all")), bool(args.get("stack")), bool(args.get("raw")))
+        return cap(text, limit), False
+    if name != "unity":
+        return f"unknown tool {name}", True
+    pairs = [(k, mcp_value(v)) for k, v in (args.get("args") or {}).items()]
+    code, text, path = request(project, args.get("command", ""), pairs, args.get("timeout"))
+    return cap(text, limit, path), code != 0
+
+
+def mcp(project):
+    def send(msg):
+        sys.stdout.write(json.dumps(msg) + "\n")
+        sys.stdout.flush()
+
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}})
+            continue
+        method, mid = msg.get("method"), msg.get("id")
+        if mid is None:
+            continue  # notifications (initialized, cancelled) need no answer
+        if method == "initialize":
+            version = (msg.get("params") or {}).get("protocolVersion", "2025-06-18")
+            result = {"protocolVersion": version, "capabilities": {"tools": {}},
+                      "serverInfo": {"name": "agent-bridge", "version": PACKAGE_VERSION}}
+        elif method == "tools/list":
+            result = {"tools": MCP_TOOLS}
+        elif method == "tools/call":
+            params = msg.get("params") or {}
+            try:
+                text, is_error = mcp_call(project, params.get("name"), params.get("arguments") or {})
+            except Exception as e:  # keep serving; report the failure as a tool error
+                text, is_error = f"ub: {type(e).__name__}: {e}", True
+            result = {"content": [{"type": "text", "text": text}], "isError": is_error}
+        elif method == "ping":
+            result = {}
+        else:
+            send({"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"method not found: {method}"}})
+            continue
+        send({"jsonrpc": "2.0", "id": mid, "result": result})
+    return 0
+
+
+def package_version():
+    try:
+        return json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "package.json")))["version"]
+    except (OSError, ValueError, KeyError):
+        return "unknown"
+
+
+PACKAGE_VERSION = package_version()
+
+
+def main():
+    # Object names can be non-ASCII; don't let a cp1252 console or pipe (Windows) crash the print.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    argv = sys.argv[1:]
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    limit = int(take_opt(argv, "--max", "6000"))
+    timeout = take_opt(argv, "--timeout", None)
+    project = take_opt(argv, "--project", None) or os.environ.get("UB_PROJECT") or find_project(os.getcwd())
+    if not project:
+        print("ub: not inside a Unity project (use --project or UB_PROJECT)", file=sys.stderr)
+        return 2
+
+    cmd, rest = argv[0], argv[1:]
+    if cmd == "mcp":
+        return mcp(project)
+    if cmd == "logs":
+        pattern = take_opt(rest, "-g", None)
+        sys.stdout.write(cap(logs_text(project, pattern, "--all" in rest, "--stack" in rest, "--raw" in rest), limit))
+        return 0
+
+    if rest and "=" not in rest[0]:
+        rest[0] = "action=" + rest[0]
+    pairs = []
+    for a in rest:
+        if "=" not in a:
+            print(f"ub: arguments are key=value, got '{a}'", file=sys.stderr)
+            return 2
+        k, v = a.split("=", 1)
+        pairs.append((k, v))
+    code, text, path = request(project, cmd, pairs, timeout)
+    if code in (2, 3):
+        print(text, file=sys.stderr)
+    else:
+        sys.stdout.write(cap(text, limit, path))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,8 @@
+{
+    "name": "DarkSwordsman.AgentBridge.Editor",
+    "rootNamespace": "DarkSwordsman.AgentBridge",
+    "references": [],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "autoReferenced": false
+}
