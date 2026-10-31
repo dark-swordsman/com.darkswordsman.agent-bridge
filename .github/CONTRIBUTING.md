@@ -4,9 +4,17 @@ Thanks for helping. This is a small hobby project, so the process is light.
 
 ## Workflow
 
-1. Fork the repo and create a branch in your fork.
+Every change comes in as a pull request from a fork, including from people the maintainer knows. The repo doesn't add collaborators, so nobody else pushes branches here.
+
+1. Fork the repo and create a branch in your fork:
+   ```
+   gh repo fork dark-swordsman/com.darkswordsman.agent-bridge --clone
+   cd com.darkswordsman.agent-bridge
+   git switch -c my-change
+   ```
 2. Make one focused change per pull request. A new command, a platform fix and a refactor are three PRs.
-3. Open a PR against `main` here. The template asks what you changed and what you tested it on.
+3. Push the branch to your fork and open a PR against `main` here (`gh pr create`). The template asks what you changed and what you tested it on. Leave **Allow edits by maintainers** on, so small fixes can be made on your branch directly.
+4. Before starting new work, sync your fork's `main` (`gh repo sync`, or **Sync fork** on GitHub).
 
 For anything bigger than a fix, open an issue first so we can agree on the shape.
 
@@ -57,4 +65,4 @@ Unity generates a `.meta` file for every new file under `Editor/` (and for root 
 
 ## Releases
 
-The maintainer bumps `package.json`, moves **Unreleased** in the CHANGELOG to the new version, and tags `vX.Y.Z`. Versions are pre-1.0, so a minor bump may change behavior.
+Don't bump the version or add tags in a PR; just add your CHANGELOG entry under **Unreleased**. Merged changes go out in the next release, which the maintainer cuts following `Documentation~/releasing.md`. Versions are pre-1.0, so a minor bump may change behavior.
