@@ -31,7 +31,9 @@ namespace DarkSwordsman.AgentBridge
         private static void CopyUbPath()
         {
             var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(AgentBridge).Assembly);
-            var ub = Path.Combine(package.resolvedPath, "Tools~", "ub");
+            // Windows ignores the shebang, so hand out the ub.cmd launcher there.
+            var name = Application.platform == RuntimePlatform.WindowsEditor ? "ub.cmd" : "ub";
+            var ub = Path.Combine(package.resolvedPath, "Tools~", name);
             EditorGUIUtility.systemCopyBuffer = ub;
             Debug.Log("[AgentBridge] copied ub path: " + ub);
         }
@@ -92,8 +94,21 @@ namespace DarkSwordsman.AgentBridge
             var final = Path.Combine(OutDir, id + ".txt");
             var tmp = final + ".tmp";
             File.WriteAllText(tmp, result);
-            if (File.Exists(final)) File.Delete(final);
-            File.Move(tmp, final);
+            // On Windows, antivirus can hold a fresh file for a moment. The request is already deleted,
+            // so giving up here would leave the CLI waiting until its timeout.
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    if (File.Exists(final)) File.Delete(final);
+                    File.Move(tmp, final);
+                    return;
+                }
+                catch (Exception e) when ((e is IOException || e is UnauthorizedAccessException) && attempt < 10)
+                {
+                    System.Threading.Thread.Sleep(50);
+                }
+            }
         }
     }
 

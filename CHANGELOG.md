@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Windows: `Tools~/ub.cmd` launcher, which **Copy ub Path** now copies on Windows. Not yet confirmed on Windows ([#1](https://github.com/dark-swordsman/com.darkswordsman.agent-bridge/issues/1)).
+- Retry writing an answer when the file is briefly locked (e.g. by antivirus), instead of dropping it.
+- README: the install URL pins the release tag by default.
+
 ## 0.3.0 (2026-10-31)
 
 First public release.
