@@ -13,7 +13,7 @@ For anything bigger than a fix, open an issue first so we can agree on the shape
 ## Ground rules
 
 - **Target:** Unity 2022.3 (what VRChat uses). Don't use APIs newer than that.
-- **Don't break other platforms.** It's developed on Linux, and Windows support is in progress. Put platform-specific code behind `#if UNITY_EDITOR_WIN` / `UNITY_EDITOR_LINUX` / `UNITY_EDITOR_OSX` in C#, and `sys.platform` checks in Python. Say in the PR which platforms you actually ran it on.
+- **Don't break other platforms.** It's developed on Linux, and Windows support is in progress ([issue #1](https://github.com/dark-swordsman/com.darkswordsman.agent-bridge/issues/1)). Put platform-specific code behind `#if UNITY_EDITOR_WIN` / `UNITY_EDITOR_LINUX` / `UNITY_EDITOR_OSX` in C#, and `sys.platform` checks in Python. Say in the PR which platforms you actually ran it on.
 - **No dependencies.** The C# side uses only Unity's editor API. `Tools~/ub` is a single Python 3.7+ file using only the standard library.
 - **Small output.** The point of the bridge is to keep agents' context small. Commands print short plain text, filter by default, and offer `filter=`/`limit=` rather than dumping everything.
 - **Fail loudly.** User mistakes throw `ArgumentException`; the message becomes the `ERROR:` line. It should name what *does* exist, such as similar paths or available components. Never report success after doing nothing.

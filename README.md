@@ -12,7 +12,7 @@ It's a general Unity tool, built and tested on **Unity 2022.3** for **VRChat** p
 - **`menu` runs any menu item,** which in practice means arbitrary editor code, including from other packages.
 - **No authentication.** Anything that can write a file into `<project>/Temp/AgentBridge/in/` can drive the editor while it's open. That's no more than local file access already allows, but know it's there. Nothing listens on the network.
 - **Your agent's permission settings are the only gate.** Keep per-command approval on (for the shell or the MCP tool) until you trust what it does.
-- Tested on Linux with Unity 2022.3. **Windows is written for but not yet confirmed**; see the Windows issue.
+- Tested on Linux with Unity 2022.3. **Windows is written for but not yet confirmed**; see [issue #1](https://github.com/dark-swordsman/com.darkswordsman.agent-bridge/issues/1).
 
 ## Why not just a Unity MCP server?
 
@@ -119,7 +119,7 @@ These activate only when the package is present:
 - **VRCFury:** `component=Toggle` (or any feature type) matches VRCFury components by feature. `addcomp type=VRCFury feature=Toggle` creates one, and `set` reaches into feature content, including `new:<ActionType>` for action lists. This reads VRCFury's serialized `content` field; if a VRCFury update renames it, feature matching stops and plain type names keep working.
 - **Poiyomi:** `material` flags locked shaders, `setmat` warns before editing one, and `mesh` names UV tiles the way Poiyomi's UDIM discard does.
 
-An extension point, so other packages can add their own commands without editing the core, is planned; see the issues.
+An extension point, so other packages can add their own commands without editing the core, is planned; see [issue #2](https://github.com/dark-swordsman/com.darkswordsman.agent-bridge/issues/2).
 
 ## Extending
 
