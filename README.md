@@ -25,6 +25,8 @@ Pick one:
 - **From git:** in Package Manager, use **+ > Add package from git URL…** with `https://github.com/dark-swordsman/com.darkswordsman.agent-bridge.git#v0.3.1`. The `#v0.3.1` pins a release; without it you get whatever release is on `main` when you install.
 - **From disk:** clone the repo somewhere outside your project, then use **+ > Add package from disk…** and pick its `package.json`.
 
+`main` always matches the latest release. Day-to-day work happens on `dev`, which may be broken at any time, so don't install from it unless you're testing a fix.
+
 The CLI is `Tools~/ub`, written in Python 3.7+ with no dependencies. **Tools > Agent Bridge > Copy ub Path** copies its location; with a git install it lives under `Library/PackageCache/`. Run it from anywhere inside the project, or pass `--project DIR`. On Windows, run `Tools~\ub.cmd` (the menu item copies that path there), which starts the script with `py` or `python`.
 
 ## 🔍 Reads
