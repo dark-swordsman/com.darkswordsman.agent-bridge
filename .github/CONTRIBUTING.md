@@ -6,15 +6,16 @@ Thanks for helping. This is a small hobby project, so the process is light.
 
 Every change comes in as a pull request from a fork, including from people the maintainer knows. The repo doesn't add collaborators, so nobody else pushes branches here.
 
-1. Fork the repo and create a branch in your fork:
+1. Fork the repo and create a branch from `dev`, where work happens (`main` only holds releases):
    ```
    gh repo fork dark-swordsman/com.darkswordsman.agent-bridge --clone
    cd com.darkswordsman.agent-bridge
-   git switch -c my-change
+   git fetch upstream
+   git switch -c my-change upstream/dev
    ```
 2. Make one focused change per pull request. A new command, a platform fix and a refactor are three PRs.
-3. Push the branch to your fork and open a PR against `main` here (`gh pr create`). The template asks what you changed and what you tested it on. Leave **Allow edits by maintainers** on, so small fixes can be made on your branch directly.
-4. Before starting new work, sync your fork's `main` (`gh repo sync`, or **Sync fork** on GitHub).
+3. Push the branch to your fork and open a PR against `dev` here (`gh pr create --base dev`). GitHub suggests `main` by default, so check the base. The template asks what you changed and what you tested it on. Leave **Allow edits by maintainers** on, so small fixes can be made on your branch directly.
+4. For new work, `git fetch upstream` and branch from `upstream/dev` again.
 
 For anything bigger than a fix, open an issue first so we can agree on the shape.
 
