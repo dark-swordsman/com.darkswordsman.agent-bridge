@@ -59,4 +59,4 @@ Parsed by the property's type:
 - [x] Settle the name (kept `com.darkswordsman.agent-bridge`) and repo; add a LICENSE (MIT) and a CHANGELOG.
 - [x] Add **Tools > Agent Bridge > Copy ub Path**, for git installs under `Library/PackageCache/`.
 - [ ] Have someone confirm Windows, especially polling while Unity is unfocused.
-- [ ] Make the repo public.
+- [x] Make the repo public.
