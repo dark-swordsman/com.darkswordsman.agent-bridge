@@ -29,20 +29,38 @@ The CLI is `Tools~/ub`, written in Python 3.7+ with no dependencies. **Tools > A
 
 ## 🔍 Reads
 
+Each command's general form comes first, with its examples indented below it. `<x>` is a value you fill in, `[key=value]` is optional and shows the default, and `a | b` means one or the other. `<target>` is `path=<scene path>`, or `asset=<prefab> [path=<child path>]` to work inside a prefab asset. `<type>` is a component type or a VRCFury feature name.
+
 ```
 ub ping                                                  # Unity state, open scenes, selection
-ub find name=Hoodie                                      # scene paths, inactive objects included
-ub hierarchy path=Avatar depth=1
-ub hierarchy asset="Assets/Avatar/Avatar.prefab" depth=1
-ub props path=Avatar/Hoodie component=Toggle             # VRCFury features match by feature type
-ub props path=Avatar/Body component=SkinnedMeshRenderer filter=m_Materials
-ub props asset="Assets/Avatar/Parameters.asset"          # plain assets work too
-ub material asset="Assets/Avatar/Body.mat" prefix=_Color
-ub material path=Avatar/Body slot=0 prefix=_UDIM
-ub mesh path=Avatar/Hoodie shapes=Hide                   # blendshapes, UV tiles they move, bones
-ub overrides path=Avatar                                 # prefab instance overrides
-ub logs                                                  # console messages since the last `ub logs`
-ub logs -g "error|exception"
+
+ub find name=<substring> [component=<type>] [limit=200]  # scene paths, inactive objects included
+    ub find name=Hoodie
+
+ub hierarchy <target> [depth=2] [components=1]
+    ub hierarchy path=Avatar depth=1
+    ub hierarchy asset="Assets/Avatar/Avatar.prefab" depth=1
+
+ub props <target> [component=<type>] [index=<n>] [filter=<substring>] [limit=400]
+    ub props path=Avatar/Hoodie component=Toggle         # VRCFury features match by feature type
+    ub props path=Avatar/Body component=SkinnedMeshRenderer filter=m_Materials
+
+ub props asset=<non-prefab asset> [sub=<sub-asset name>] [filter=<substring>] [limit=400]  # plain assets work too
+    ub props asset="Assets/Avatar/Parameters.asset"
+
+ub material (asset=<.mat> | <target> [slot=0]) [prefix=<property prefix>] [keywords=0]
+    ub material asset="Assets/Avatar/Body.mat" prefix=_Color
+    ub material path=Avatar/Body slot=0 prefix=_UDIM
+
+ub mesh <target> [shapes=<substring>]                    # blendshapes, UV tiles they move, bones
+    ub mesh path=Avatar/Hoodie shapes=Hide
+
+ub overrides <target> [filter=<substring>] [limit=200] [defaults=0]  # prefab instance overrides
+    ub overrides path=Avatar
+
+ub logs [-g <regex>] [--all] [--stack] [--raw]           # console messages since the last `ub logs`
+    ub logs
+    ub logs -g "error|exception"
 ```
 
 ## ✏️ Writes
@@ -50,27 +68,59 @@ ub logs -g "error|exception"
 The full design is in `Documentation~/write-commands.md`.
 
 ```
-ub set path=Avatar/Hoodie component=Transform m_LocalPosition=0,0.1,0
-ub set path=Avatar/Hoodie component=GameObject m_IsActive=false
-ub set path=Avatar/Hoodie component=Toggle content.name="Clothing/Hoodie" content.saved=true
-ub set path=Avatar/Hoodie component=Toggle content.state.actions.Array.size=1 "content.state.actions.Array.data[0]=new:BlendShapeAction"
-ub set asset="Assets/Avatar/Avatar.prefab" path=Body component=SkinnedMeshRenderer "m_Materials.Array.data[0]=Assets/Avatar/Body.mat"
-ub set asset="Assets/Avatar/Parameters.asset" "parameters.Array.data[3].saved=false"
-ub setmat asset="Assets/Avatar/Body.mat" _Color="#ff8080" _Cutoff=0.5
-ub create path=Avatar name=Props                         # or prefab=Assets/x.prefab for a linked instance
-ub duplicate path=Avatar/Hoodie name="Hoodie 2"
-ub reparent path=Avatar/Props to=Avatar/Armature/Hips    # keeps world position unless keepworld=0
-ub addcomp path=Avatar/Props type=VRCFury feature=Toggle
-ub rmcomp path=Avatar/Props component=BoxCollider
-ub delete path=Avatar/Props
-ub revert path=Avatar/Body component=SkinnedMeshRenderer "prop=m_Materials.Array.data[0]"
-ub apply path=Avatar/Body                                # that object's and its components' overrides
-ub select path=Avatar                                    # works on inactive objects
-ub menu item="Tools/VRCFury/Build an Editor Test Copy"   # waits up to 600 s
+ub set <target> component=<type> [index=<n>] <propertyPath>=<value> ...
+    ub set path=Avatar/Hoodie component=Transform m_LocalPosition=0,0.1,0
+    ub set path=Avatar/Hoodie component=GameObject m_IsActive=false
+    ub set path=Avatar/Hoodie component=Toggle content.name="Clothing/Hoodie" content.saved=true
+    ub set path=Avatar/Hoodie component=Toggle content.state.actions.Array.size=1 "content.state.actions.Array.data[0]=new:BlendShapeAction"
+    ub set asset="Assets/Avatar/Avatar.prefab" path=Body component=SkinnedMeshRenderer "m_Materials.Array.data[0]=Assets/Avatar/Body.mat"
+
+ub set asset=<non-prefab asset> [sub=<sub-asset name>] <propertyPath>=<value> ...
+    ub set asset="Assets/Avatar/Parameters.asset" "parameters.Array.data[3].saved=false"
+
+ub setmat (asset=<.mat> | <target> [slot=0]) <_Property>=<value> ...
+    ub setmat asset="Assets/Avatar/Body.mat" _Color="#ff8080" _Cutoff=0.5
+
+ub create [<target>] name=<name> [prefab=<prefab>]       # <target> is the parent; none means the scene root
+    ub create path=Avatar name=Props                     # or prefab=Assets/x.prefab for a linked instance
+
+ub duplicate <target> [name=<name>]
+    ub duplicate path=Avatar/Hoodie name="Hoodie 2"
+
+ub reparent <target> to=<new parent path> [keepworld=1] [sibling=<n>]  # empty to= moves it to the root
+    ub reparent path=Avatar/Props to=Avatar/Armature/Hips  # keeps world position unless keepworld=0
+
+ub addcomp <target> type=<component type> [feature=<VRCFury feature>]
+    ub addcomp path=Avatar/Props type=VRCFury feature=Toggle
+
+ub rmcomp <target> component=<type> [index=<n>]
+    ub rmcomp path=Avatar/Props component=BoxCollider
+
+ub delete <target>
+    ub delete path=Avatar/Props
+
+ub revert <target> [component=<type> [index=<n>]] [prop=<propertyPath>] [to=<prefab>]
+    ub revert path=Avatar/Body component=SkinnedMeshRenderer "prop=m_Materials.Array.data[0]"
+
+ub apply <target> [component=<type> [index=<n>]] [prop=<propertyPath>] [to=<prefab>]
+    ub apply path=Avatar/Body                            # that object's and its components' overrides
+
+ub select path=<scene path>                              # works on inactive objects
+    ub select path=Avatar
+
+ub menu item=<menu path>                                 # waits up to 600 s
+    ub menu item="Tools/VRCFury/Build an Editor Test Copy"
+
 ub refresh                                               # AssetDatabase.Refresh
-ub save                                                  # dirty scenes, the prefab stage, and assets
-ub open scene="Assets/Scenes/Main.unity"                 # refuses with unsaved changes unless force=1
-ub play enter                                            # also: exit, pause, resume; `ub play` alone shows status
+
+ub save [scene=<scene path>]                             # dirty scenes, the prefab stage, and assets
+    ub save
+
+ub open scene=<scene path> [additive=0] [force=0]        # refuses with unsaved changes unless force=1
+    ub open scene="Assets/Scenes/Main.unity"
+
+ub play [enter|exit|pause|resume]                        # alone, shows play mode status
+    ub play enter
 ```
 
 - `set` takes `<propertyPath>=<value>` pairs and applies them in order. It accepts the same paths and value formats that `props` prints, so you can read a value and write it back. `component=GameObject` targets the GameObject itself. On a non-prefab asset (`.asset`, `.controller`, …), `set` edits the asset itself, and `sub=` picks a sub-asset by name.
