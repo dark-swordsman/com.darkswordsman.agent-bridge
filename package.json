@@ -1,6 +1,6 @@
 {
   "name": "com.darkswordsman.agent-bridge",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "displayName": "Agent Bridge",
   "description": "File-based query and edit bridge so coding agents can work with the open Unity editor through small, grep-able output. See README.md.",
   "unity": "2022.3",
